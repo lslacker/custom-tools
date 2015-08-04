@@ -2,15 +2,18 @@ __author__ = 'Lmai'
 import xlrd
 import datetime
 
-class ExcelReader:
 
+class ExcelReader:
     def __init__(self, excel_file):
         self.workbook = xlrd.open_workbook(excel_file)
+        self.header = None
+        self.create_qry = 'CREATE TABLE  {table_name} (%s)'
 
     def show_sheets(self):
         return self.workbook.sheet_names()
 
     def get_data_from_sheet(self, sheet_name_or_idx, with_header=True):
+
         try:
             worksheet = self.workbook.sheet_by_index(sheet_name_or_idx)
         except TypeError:
@@ -21,40 +24,44 @@ class ExcelReader:
         offset_rows = 0
 
         if with_header:
-            header = worksheet.row_values(0)
-            yield header
+            self.header = worksheet.row_values(0)
             offset_rows += 1
         else:
+            self.header = ['field{}'.format(i + 1) for i in range(ncols)]
+
+        def get_type(cell):
+            if cell.ctype == xlrd.XL_CELL_DATE:
+                return 'DATETIME'
+            elif cell.ctype == xlrd.XL_CELL_EMPTY or \
+                            cell.ctype == xlrd.XL_CELL_BLANK or \
+                            cell.ctype == xlrd.XL_CELL_TEXT:
+                return 'VARCHAR(MAX)'
+            elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                return 'FLOAT'
+            elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+                return 'BIT'
+            else:
+                raise Exception('Cell type is not ')
 
         # determine data type
+        # [:-1] is to remove last comma
+        self.create_qry %= '\n'.join(['[{}] {},'.format(field, get_type(worksheet.cell(offset_rows, colidx)))
+                                      for colidx, field in enumerate(self.header)])[:-1]
+
+        def get_value(cell):
+            cell_value = cell.value
+            if cell.ctype == xlrd.XL_CELL_DATE:
+                cell_value = datetime.datetime(*xlrd.xldate_as_tuple(cell_value, self.workbook.datemode))
+            return cell_value
 
         # real value
-        for rowidx in range(offset_rows, nrows):
-            rows = []
-            for colidx in range(ncols):
-                cell = worksheet.cell(rowidx, colidx)
-                cell_value = cell.value
-                if cell.ctype == xlrd.XL_CELL_DATE:
-                    cell_value = datetime.datetime(*xlrd.xldate_as_tuple(cell_value, self.workbook.datemode))
-                rows += [cell_value]
-            yield rows
-        # cell = worksheet.cell(1, 3)
-        #
-        # print(dir(cell))
-        # print(cell.ctype)
-        # print(cell.xf_index)
-        # print(worksheet.nrows)
-        # print(worksheet.ncols)
-        # print(cell)
-
-        # for cell in worksheet.row_values(1):
-        #     print(cell.xf_index)
-        #     print(dir(cell))
-        #     print(type(cell))
+        return ((get_value(worksheet.cell(rowidx, colidx)) for colidx in range(ncols))
+                for rowidx in range(offset_rows, nrows))
 
 
 if __name__ == '__main__':
-    fn = r'C:\Users\Lmai\My Temp\Growth series above threshold 03082015.xlsx'
+    fn = r'/home/lslacker/workspace/melmailing/quote.xlsx'
     reader = ExcelReader(fn)
-    rows = list(reader.get_data_from_sheet(0))
-    print(rows)
+    rows = reader.get_data_from_sheet(0)
+    print(type(rows))
+    print(reader.create_qry)
