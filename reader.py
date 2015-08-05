@@ -4,6 +4,7 @@ import datetime
 
 
 class ExcelReader:
+
     def __init__(self, excel_file):
         self.workbook = xlrd.open_workbook(excel_file)
         self.header = None
@@ -55,13 +56,7 @@ class ExcelReader:
             return cell_value
 
         # real value
-        return ((get_value(worksheet.cell(rowidx, colidx)) for colidx in range(ncols))
+        return ([get_value(worksheet.cell(rowidx, colidx)) for colidx in range(ncols)]
                 for rowidx in range(offset_rows, nrows))
 
 
-if __name__ == '__main__':
-    fn = r'/home/lslacker/workspace/melmailing/quote.xlsx'
-    reader = ExcelReader(fn)
-    rows = reader.get_data_from_sheet(0)
-    print(type(rows))
-    print(reader.create_qry)
