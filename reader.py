@@ -36,7 +36,7 @@ class ExcelReader:
             elif cell.ctype == xlrd.XL_CELL_EMPTY or \
                             cell.ctype == xlrd.XL_CELL_BLANK or \
                             cell.ctype == xlrd.XL_CELL_TEXT:
-                return 'VARCHAR(MAX)'
+                return 'VARCHAR(MAX) collate SQL_Latin1_General_CP1_CI_AS'
             elif cell.ctype == xlrd.XL_CELL_NUMBER:
                 return 'FLOAT'
             elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
