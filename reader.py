@@ -49,14 +49,23 @@ class ExcelReader:
         self.create_qry %= '\n'.join(['[{}] {},'.format(field, get_type(worksheet.cell(offset_rows, colidx)))
                                       for colidx, field in enumerate(self.header)])[:-1]
 
-        def get_value(cell):
+        def get_value(rowidx, colidx):
+            cell = worksheet.cell(rowidx, colidx)
             cell_value = cell.value
             if cell.ctype == xlrd.XL_CELL_DATE:
                 cell_value = datetime.datetime(*xlrd.xldate_as_tuple(cell_value, self.workbook.datemode))
+            elif cell.ctype == xlrd.XL_CELL_EMPTY or \
+                    cell.ctype == xlrd.XL_CELL_BLANK or \
+                    cell.ctype == xlrd.XL_CELL_NUMBER or \
+                    cell.ctype == xlrd.XL_CELL_BOOLEAN or \
+                    cell.ctype == xlrd.XL_CELL_TEXT:
+                pass
+            else:
+                raise Exception('Cell [{}, {}] type is unknown'.format(rowidx+1, colidx))
             return cell_value
 
         # real value
-        return ([get_value(worksheet.cell(rowidx, colidx)) for colidx in range(ncols)]
+        return ([get_value(rowidx, colidx) for colidx in range(ncols)]
                 for rowidx in range(offset_rows, nrows))
 
 
