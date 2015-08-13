@@ -97,6 +97,18 @@ def qry_add_new_holdings(tt_name, data_provider):
             )
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
+
+def qry_regenerate_report(tt_name):
+    return '''
+    update tblInvestmentReport
+    set Regenerate = 1
+    where reportID = 24
+    and InvestmentID in (select StockID from Lonsec.dbo.vewEquities
+                         where StockCode in (select distinct ticker from {tt_name}))
+    and IsActive = 1 and Regenerate = 0
+    '''.format(tt_name=tt_name)
+
+
 ##### END - TOP 10 HOLDING QUERIES ###
 
 def qry_get_attribute_id():
@@ -149,15 +161,11 @@ def qry_insert_new_investment_attributes(attribute_tt_name):
     '''.format(attribute_tt_name=attribute_tt_name)
 
 
-def qry_regenerate_report(tt_name):
+def qry_delete_rerun_data(table_name):
     return '''
-    update tblInvestmentReport
-    set Regenerate = 1
-    where reportID in (11,24)
-    and InvestmentID in (select StockID from Lonsec.dbo.vewEquities
-                         where StockCode in (select distinct code from {tt_name}))
-    and IsActive = 1 and Regenerate = 0
-    '''.format(tt_name=tt_name)
+    delete from {table_name}
+    where datefrom > dateto
+    '''.format(table_name=table_name)
 
 
 def backup_table(db, tt_name):
@@ -249,6 +257,13 @@ def upload_top10(db, excel_file, sheet_name_or_idx, data_provider):
     logger.info('{} updated by adding the new holding'.format(count))
     assert count == len(tt_name)
 
+    count = db.execute(qry_regenerate_report(tt_name))
+    logger.info('{} updated for regenerating report'.format(count))
+
+    # cleaning up junk data due to re-run
+    count = db.execute(qry_delete_rerun_data('ExternalData..tblTopHoldings'))
+    logger.info('{} deleted in ExternalData..tblTopHoldings due to re-run'.format(count))
+
 
 def upload_cost(db, excel_file, sheet_name_or_idx, data_provider):
     tt_name = upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
@@ -280,6 +295,10 @@ def upload_cost(db, excel_file, sheet_name_or_idx, data_provider):
         logger.info('{} inserted into tblInvestmentAttribute'.format(count))
         assert count == len(attribute_tt_name)
         logger.info('\n')
+
+    # cleaning up junk data due to re-run
+    count = db.execute(qry_delete_rerun_data('tblInvestmentAttribute'))
+    logger.info('{} deleted in tblInvestmentAttribute due to re-run'.format(count))
 
 
 def consoleUI():
