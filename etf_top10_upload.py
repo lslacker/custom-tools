@@ -98,15 +98,15 @@ def qry_add_new_holdings(tt_name, data_provider):
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
 
-def qry_regenerate_report(tt_name):
+def qry_regenerate_report(tt_name, code_field='ticker'):
     return '''
     update tblInvestmentReport
     set Regenerate = 1
     where reportID = 24
     and InvestmentID in (select StockID from Lonsec.dbo.vewEquities
-                         where StockCode in (select distinct ticker from {tt_name}))
+                         where StockCode in (select distinct {code_field} from {tt_name}))
     and IsActive = 1 and Regenerate = 0
-    '''.format(tt_name=tt_name)
+    '''.format(tt_name=tt_name, code_field=code_field)
 
 
 ##### END - TOP 10 HOLDING QUERIES ###
@@ -130,8 +130,9 @@ def qry_create_temp_table_for_attribute_name(tt_name, attribute_name, attribute_
     select tt.code, s.investmentID, {attribute_id} as attribute_id,tt. [{attribute_name}] as attribute_value, tt.date
     from {tt_name} tt
     inner join vewISF_Stock s on tt.code = s.investmentCode
-    where tt.[{attribute_name}] is not null and tt.[{attribute_name}] > 0
-    '''.format(tt_name=tt_name, attribute_name=attribute_name, attribute_id=attribute_id)
+    where tt.[{attribute_name}] is not null and tt.[{attribute_name}] {cond}
+    '''.format(tt_name=tt_name, attribute_name=attribute_name, attribute_id=attribute_id,
+               cond='> 0' if attribute_id != 19 else "<>''")
 
 
 def qry_update_DateTo_of_tbInvestmentAttribute(attribute_tt_name):
@@ -159,6 +160,15 @@ def qry_insert_new_investment_attributes(attribute_tt_name):
     ,SYSTEM_USER AS UpdatedBy
     FROM {attribute_tt_name}
     '''.format(attribute_tt_name=attribute_tt_name)
+
+
+def qry_clone_date_to_attribute_id_19(tt_name, attribute_name):
+    return '''
+    select *,
+    CAST(DAY([date]) AS VARCHAR(2)) + ' ' + DATENAME(MM, [date]) + ' ' + CAST(YEAR([date]) AS VARCHAR(4))
+        as [{attribute_name}]
+    from {tt_name}
+    '''.format(tt_name=tt_name, attribute_name=attribute_name)
 
 
 def qry_delete_rerun_data(table_name):
@@ -265,8 +275,11 @@ def upload_top10(db, excel_file, sheet_name_or_idx, data_provider):
     logger.info('{} deleted in ExternalData..tblTopHoldings due to re-run'.format(count))
 
 
-def upload_cost(db, excel_file, sheet_name_or_idx, data_provider):
+def upload_cost(db, excel_file, sheet_name_or_idx):
     tt_name = upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
+
+    # create other quries for attribute 19
+    tt_name = TempTable.create_from_query(db, qry_clone_date_to_attribute_id_19(tt_name, 'Fees & Indirect Costs Date'))
 
     count = db.execute(qry_update_last_date_of_month(tt_name))
     logger.info('{} updated to ensure [date] column is last day of the month\n'.format(count))
@@ -281,7 +294,7 @@ def upload_cost(db, excel_file, sheet_name_or_idx, data_provider):
 
     for attribute_name, attribute_id in attribute_lookup.items():
 
-        attribute_tt_name = TempTable.create_from_query(db,qry_create_temp_table_for_attribute_name(tt_name
+        attribute_tt_name = TempTable.create_from_query(db, qry_create_temp_table_for_attribute_name(tt_name
                                                                                                     , attribute_name
                                                                                                     , attribute_id))
         logger.info('create table [{}] for attribute name [{}][{}] - Qty {}'.format(attribute_tt_name, attribute_name
@@ -299,6 +312,9 @@ def upload_cost(db, excel_file, sheet_name_or_idx, data_provider):
     # cleaning up junk data due to re-run
     count = db.execute(qry_delete_rerun_data('tblInvestmentAttribute'))
     logger.info('{} deleted in tblInvestmentAttribute due to re-run'.format(count))
+
+    count = db.execute(qry_regenerate_report(tt_name, code_field='code'))
+    logger.info('{} updated for regenerating report'.format(count))
 
 
 def consoleUI():
@@ -329,7 +345,7 @@ def consoleUI():
     upload_top10(db, a.input, a.top10, a.data_provider)
     logger.info('*'*40)
     logger.info('LOADING COST')
-    upload_cost(db, a.input, a.cost, a.data_provider)
+    upload_cost(db, a.input, a.cost)
 
     if not a.dry_run:
         logger.info('Commit changes')
