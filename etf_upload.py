@@ -24,7 +24,7 @@ def qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     return '''
     delete from ExternalData.dbo.tblGrowthSeries
     where ExternalCode in (select distinct code from {tt_name})
-    --and dataproviderid = {data_provider}
+    and dataproviderid = {data_provider}
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
 
