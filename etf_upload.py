@@ -211,7 +211,8 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider):
         order by igs.[date] desc
         ''', to_be_added_stock_codes[-1])
         logger.info(rows)
-        assert len(to_be_added_stock_codes) == count
+        # can not do asset because trigger return 0 :-(
+        # assert len(to_be_added_stock_codes) == count
 
     count = db.execute(qry_regenerate_report(tt_name))
     logger.info('{} updated for regenerating report'.format(count))
