@@ -3,7 +3,7 @@ __author__ = 'lslacker'
 import argparse
 from mssqlwrapper import DB, TempTable
 import logging
-from reader import ExcelReader
+import helper
 import datetime
 import itertools
 
@@ -117,43 +117,7 @@ def backup_table(db, tt_name):
 def upload(db, excel_file, sheet_name_or_idx, data_provider):
     # Import excel file into temp table
 
-    def get_data_from_excel():
-        reader = ExcelReader(excel_file)
-        rows = reader.get_data_from_sheet(sheet_name_or_idx)
-        return rows, reader.create_qry
-
-    tt_name = TempTable.create_from_data(db, *get_data_from_excel())
-
-    # Extract records in [ExternalData].dbo.tblGrowthSeries that matches InvestmentID in temp table imported above
-    date_value = db.get_one_value('select top 1 [date] from {}'.format(tt_name))
-
-    if not isinstance(date_value, datetime.datetime):
-        if isinstance(date_value, str):
-            logger.info('Convert varchar to datetime for [date] column')
-
-            # update table to yyyy-mm-dd format before convert to datetime type
-            db.execute('''
-                update {}
-                set [date]=right([date],4)+'-'+SUBSTRING([date], 4, 2) + '-' + left([date],2)
-            '''.format(tt_name))
-        elif isinstance(date_value, float):
-            logger.info('Convert float to datetime for [date] column')
-            # SQL Server counts its dates from 01/01/1900 and Excel from 12/30/1899 = 2 days less.
-            # update table to yyyy-mm-dd format before convert to datetime type
-            db.execute('''
-                alter table {tt_name}
-                alter column [date] varchar(20)
-            '''.format(tt_name=tt_name))
-
-            db.execute('''
-                update {tt_name}
-                set date=cast(date - 2 as datetime)
-            '''.format(tt_name=tt_name))
-
-        db.execute('''
-            alter table {}
-            alter column [date] date
-        '''.format(tt_name))
+    tt_name = helper.upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
 
     db.execute(qry_update_last_date_of_month(tt_name))
 
