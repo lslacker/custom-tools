@@ -8,6 +8,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def debug(fn):
+
+    def wraps(*args, **kwargs):
+        query = fn(*args, **kwargs)
+        logger.info('\n{}:\n{}'.format(fn.__name__, query))
+        return query
+
+    return wraps
+
+
 def upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx):
     def get_data_from_excel():
         reader = ExcelReader(excel_file)
