@@ -9,25 +9,16 @@ import itertools
 
 logger = logging.getLogger(__name__)
 
-
-def debug(fn):
-
-    def wraps(*args, **kwargs):
-        query = fn(*args, **kwargs)
-        logger.info('\n{}:\n{}'.format(fn.__name__, query))
-        return query
-
-    return wraps
-
-
+@helper.debug
 def qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     return '''
-    delete from ExternalData.dbo.tblGrowthSeries
-    where ExternalCode in (select distinct code from {tt_name})
-    and dataproviderid = {data_provider}
+    delete gs
+    from ExternalData.dbo.tblGrowthSeries  gs
+    inner join (select distinct code, date from {tt_name}) tt on gs.externalcode = tt.code and gs.date = tt.date
+    where gs.dataproviderid = {data_provider}
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
-
+@helper.debug
 def qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     return '''
     insert into ExternalData.dbo.tblGrowthSeries (ExternalCode, Date, Value, ValueExclDiv, DataProviderID, DateUpdated)
@@ -35,7 +26,7 @@ def qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     from {tt_name}
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
-
+@helper.debug
 def qry_check_codes_not_exist_in_tblStock(tt_name):
     return '''
     select distinct code
@@ -43,17 +34,17 @@ def qry_check_codes_not_exist_in_tblStock(tt_name):
     where not exists (select 1 from vewEquities b where a.code = b.stockCode)
     '''.format(tt_name=tt_name)
 
-
-def qry_check_codes_not_exist_in_tblInvestmentCode(tt_name, data_provider):
+@helper.debug
+def qry_check_codes_not_exist_in_table(table_name, tt_name, data_provider, key_field):
     return '''
     select distinct code
     from {tt_name} a
     where not exists
-         (select 1 from tblInvestmentCode b where a.code = b.investmentCode
+         (select 1 from {table_name} b where a.code = b.{key_field}
             and b.dataproviderid = {data_provider})
-    '''.format(tt_name=tt_name, data_provider=data_provider)
+    '''.format(tt_name=tt_name, data_provider=data_provider, table_name=table_name, key_field=key_field)
 
-
+@helper.debug
 def qry_update_last_date_of_month(tt_name):
     return '''
     update {tt_name}
@@ -61,33 +52,40 @@ def qry_update_last_date_of_month(tt_name):
     where [date] <> ExternalData.dbo.fnLastDayOfMonth(Date)
     '''.format(tt_name=tt_name)
 
-
-def qry_refresh_data_tblInvestmentGrowthSeries(tt_name, data_provider):
+@helper.debug
+def qry_refresh_data_table_GrowthSeries(table_name, tt_name, data_provider, key_field):
     return '''
         update ic
         set IsUsedForGrowthSeries = 0
-        from tblInvestmentCode ic
-           join (select distinct code from {tt_name}) tt on ic.investmentCode = tt.Code
+        from {table_name} ic
+           join (select distinct code from {tt_name}) tt on ic.{key_field} = tt.Code
         where ic.IsUsedForGrowthSeries = 1
         ;
         update ic
         set IsUsedForGrowthSeries = 1
-        from tblInvestmentCode ic
-           join (select distinct code from {tt_name}) tt on ic.investmentCode = tt.Code
+        from {table_name} ic
+           join (select distinct code from {tt_name}) tt on ic.{key_field} = tt.Code
         where ic.dataproviderid = {data_provider}
-    '''.format(tt_name=tt_name, data_provider=data_provider)
+    '''.format(tt_name=tt_name, data_provider=data_provider, table_name=table_name, key_field=key_field)
+
+@helper.debug
+def qry_add_new_data_table(table_name, to_be_added_stock_codes, data_provider, upload_type, key_field_code, key_field_id):
+
+    view_name = 'viewEquities' if 'investment' in upload_type else 'vewISF_Benchmark'
+    field = 'stock' if 'investment' in upload_type else upload_type
+    field1 = 'stock' if 'investment' in upload_type else 'Alternative'
 
 
-def qry_add_new_data_tblInvestmentGrowthSeries(to_be_added_stock_codes, data_provider):
     return '''
         declare @stockcodes VARCHAR(MAX) = '{codes}'
-        insert into tblInvestmentCode(InvestmentID, DataProviderID, InvestmentCode, IsUsedForGrowthSeries)
-        select distinct s.stockID,  {data_provider} as DataProviderID, s.stockCode, 1 as IsUsedForGrowthSeries
-        from tblstock s
-        inner join [dbo].[f_csvToTableVarchar](@stockcodes) t on s.stockCode = t.ID
-    '''.format(codes=','.join(to_be_added_stock_codes), data_provider=data_provider)
+        insert into {table_name}({key_field_id}, DataProviderID, {key_field_code}, IsUsedForGrowthSeries)
+        select distinct s.{field}ID,  {data_provider} as DataProviderID, s.{field1}Code, 1 as IsUsedForGrowthSeries
+        from {view_name} s
+        inner join [dbo].[f_csvToTableVarchar](@stockcodes) t on s.{field1}Code = t.ID
+    '''.format(codes=','.join(to_be_added_stock_codes), data_provider=data_provider, field=field, field1=field1
+               , table_name=table_name, view_name=view_name, key_field_code=key_field_code, key_field_id=key_field_id)
 
-
+@helper.debug
 def qry_regenerate_report(tt_name):
     return '''
     update tblInvestmentReport
@@ -114,12 +112,14 @@ def backup_table(db, tt_name):
         logger.info('Table {new_tt_name} already exists'.format(new_tt_name=new_tt_name))
 
 
-def upload(db, excel_file, sheet_name_or_idx, data_provider):
+def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
+
+    gs_table_name, table_name, key_field_code, key_field_id \
+        = 'tbl{upload_type}GrowthSeries tbl{upload_type}Code {upload_type}Code {upload_type}Id'\
+          .format(upload_type=upload_type).split(' ')
+
     # Import excel file into temp table
-
     tt_name = helper.upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
-
-    db.execute(qry_update_last_date_of_month(tt_name))
 
     # back up ExternalData.dbo.tblGrowthSeries
     backup_table(db, 'ExternalData.dbo.tblGrowthSeries')
@@ -131,55 +131,62 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider):
     logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
 
     rows = db.get_data(qry_check_codes_not_exist_in_tblStock(tt_name))
-    if rows:
+    if rows and 'investment' in upload_type:
         for row in rows:
             logger.info('{} does not exist in tblStock (due to trigger, capture only 1 message'.format(row.code))
         raise Exception('There are stock codes not exist in tblStock')
 
-    logger.info('Before inserting data to tblInvestmentGrowthSeries from ExternalData..tblGrowthSeries')
+    logger.info('Before inserting data to {gs_table_name} from ExternalData..tblGrowthSeries'
+                .format(gs_table_name=gs_table_name))
     rows = db.get_data('''
     select top 1 igs.*
-    from tblInvestmentGrowthSeries igs
-    inner join tblInvestmentCode ic on igs.investmentid = ic.investmentid
-    where ic.investmentcode=(select top 1 code from {tt_name} order by newid())
+    from {gs_table_name} igs
+    inner join {table_name} ic on igs.{upload_type}id = ic.{upload_type}id
+    where ic.{key_field}=(select top 1 code from {tt_name} order by newid())
     and ic.isUsedForGrowthSeries= 1
     order by igs.[date] desc
-    '''.format(tt_name=tt_name))
+    '''.format(tt_name=tt_name, table_name=table_name, key_field=key_field_code
+               , upload_type=upload_type, gs_table_name=gs_table_name))
     logger.info(rows)
 
-    backup_table(db, 'tblInvestmentGrowthSeries')
-    db.execute(qry_refresh_data_tblInvestmentGrowthSeries(tt_name, data_provider))
+    backup_table(db, gs_table_name)
+    db.execute(qry_refresh_data_table_GrowthSeries(table_name, tt_name, data_provider, key_field_code))
 
-    logger.info('After inserting data to tblInvestmentGrowthSeries'.format(rows[0][1]))
+    logger.info('After inserting data to {}'.format(gs_table_name))
     rows = db.get_data('''
-    select top 1 * from tblInvestmentGrowthSeries
-    where investmentid=?
+    select top 1 * from {gs_table_name}
+    where {upload_type}id=?
     order by [date] desc
-    ''', rows[0][1])
+    '''.format(upload_type=upload_type, gs_table_name=gs_table_name), rows[0][1])
     logger.info(rows)
 
     # now insert new codes if exist
-    to_be_added_stock_codes = db.get_data(qry_check_codes_not_exist_in_tblInvestmentCode(tt_name, data_provider))
+    to_be_added_stock_codes = db.get_data(qry_check_codes_not_exist_in_table(table_name, tt_name
+                                                                             , data_provider, key_field_code))
     if to_be_added_stock_codes:
         to_be_added_stock_codes = [row.code for row in to_be_added_stock_codes]
-        logger.info('{} do not exist in tblInvestmentCode, need to add'.format(to_be_added_stock_codes))
-        count = db.execute(qry_add_new_data_tblInvestmentGrowthSeries(to_be_added_stock_codes, data_provider))
-        logger.info("{} has been added in tblStockCode".format(count))
+        logger.info('{} do not exist in {}, need to add'.format(table_name, to_be_added_stock_codes, table_name))
+        count = db.execute(qry_add_new_data_table(table_name, to_be_added_stock_codes, data_provider, upload_type
+                                                  , key_field_code, key_field_id))
+        logger.info("{} has been added in tbl{type}Code"
+                    .format(count, type='stock' if 'investment' in upload_type else upload_type))
 
         rows = db.get_data('''
         select top 1 igs.*
-        from tblInvestmentGrowthSeries igs
-        inner join tblInvestmentCode ic on igs.investmentid = ic.investmentid
-        where ic.investmentcode = ?
+        from {gs_table_name} igs
+        inner join {table_name} ic on igs.{key_field_id} = ic.{key_field_id}
+        where ic.{key_field_code} = ?
         and ic.isUsedForGrowthSeries= 1
         order by igs.[date] desc
-        ''', to_be_added_stock_codes[-1])
+        '''.format(gs_table_name=gs_table_name, key_field_code=key_field_code, table_name=table_name
+                   , key_field_id=key_field_id), to_be_added_stock_codes[-1])
         logger.info(rows)
         # can not do asset because trigger return 0 :-(
         # assert len(to_be_added_stock_codes) == count
 
-    count = db.execute(qry_regenerate_report(tt_name))
-    logger.info('{} updated for regenerating report'.format(count))
+    if 'investment' in upload_type:
+        count = db.execute(qry_regenerate_report(tt_name))
+        logger.info('{} updated for regenerating report'.format(count))
 
     return tt_name
 
@@ -225,7 +232,10 @@ def consoleUI():
     parser.add_argument('--server', default=r'MEL-TST-001\WEBSQL', help='Database Server')
     parser.add_argument('--database', default=r'Lonsec', help='Database Name')
     parser.add_argument('-v', '--verbose', action='count', default=0)
-    parser.add_argument('-i', '--input', help='An excel file (normally from Jen Lee)', required=True)
+    parser.add_argument('-i', '--input', help='An excel file from James Chang)', required=True)
+    parser.add_argument('--upload-type', help='Investment Growth or Benchmark Growth'
+                        , choices=['benchmark', 'investment']
+                        , required=True)
     parser.add_argument('--sheet', help='Sheet Name or Sheet Index', required=True)
     parser.add_argument('--data-provider', help='ETF: 4, Lonsec: 1, more at tblDataProvider', default=4, required=True)
     parser.add_argument('--dry-run', action='store_true')
@@ -244,7 +254,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    tt_name = upload(db, a.input, a.sheet, a.data_provider)
+    tt_name = upload(db, a.input, a.sheet, a.data_provider, a.upload_type)
     if a.with_global:
         logger.info('{0}{1}{0}'.format('*'*10, 'NOW LOAD to ExternalData.dbo.tblGrowthSeries FOR .arc'))
         upload_global(db, tt_name, a.data_provider)
