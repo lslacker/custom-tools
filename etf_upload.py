@@ -153,12 +153,15 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
     db.execute(qry_refresh_data_table_GrowthSeries(table_name, tt_name, data_provider, key_field_code))
 
     logger.info('After inserting data to {}'.format(gs_table_name))
-    rows = db.get_data('''
-    select top 1 * from {gs_table_name}
-    where {upload_type}id=?
-    order by [date] desc
-    '''.format(upload_type=upload_type, gs_table_name=gs_table_name), rows[0][1])
-    logger.info(rows)
+    try:
+        rows = db.get_data('''
+        select top 1 * from {gs_table_name}
+        where {upload_type}id=?
+        order by [date] desc
+        '''.format(upload_type=upload_type, gs_table_name=gs_table_name), rows[0][1])
+        logger.info(rows)
+    except IndexError:
+        logger.info("data should be All new (INSERT INSTEAD OF UPDATE)")
 
     # now insert new codes if exist
     to_be_added_stock_codes = db.get_data(qry_check_codes_not_exist_in_table(table_name, tt_name
