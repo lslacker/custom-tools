@@ -9,10 +9,10 @@ import datetime
 logger = logging.getLogger(__name__)
 
 
-def add(db, benchmark_name, alternative_code):
+def add(db, benchmark_name, alternative_code, benchmark_id):
     data_dict = locals()
     del data_dict['db']
-    data_dict = ['@{k}={v!r}'.format(k=k.replace('_',''), v=v) for k, v in data_dict.items()]
+    data_dict = ['@{k}={v!r}'.format(k=k.replace('_', ''), v=v) for k, v in data_dict.items() if v is not None]
 
     proc_query = '''
     exec Lonsec.dbo.prcBenchmarkPut {params}
@@ -37,6 +37,7 @@ def consoleUI():
     parser.add_argument('--server', default=r'MEL-TST-001\WEBSQL', help='Database Server')
     parser.add_argument('--database', default=r'Lonsec', help='Database Name')
     parser.add_argument('-v', '--verbose', action='count', default=0)
+    parser.add_argument('--benchmark-id', help='Benchmark ID')
     parser.add_argument('--benchmark-name', help='Benchmark Name', required=True)
     parser.add_argument('--alternative-code', help='Benchmark Code', required=True)
     parser.add_argument('--dry-run', help='Run without commit changes', action='store_true')
@@ -53,7 +54,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    add(db, a.benchmark_name, a.alternative_code)
+    add(db, a.benchmark_name, a.alternative_code, a.benchmark_id)
 
     if not a.dry_run:
         logger.info('Commit changes')
