@@ -67,6 +67,29 @@ def qry_update_model_stock_code(tt_name, fy, data_provider):
 
     return qry
 
+
+def qry_update_ubs_stock_code(tt_name, fy, data_provider):
+    qry = '''
+    MERGE INTO ExternalData.dbo.tblStockEarnings AS target
+    USING (select t.StockCode, e.ExchangeID, {fy} as FinancialYear, DPS as DPS
+                 , EPS as EPS
+                 , [PERCENT_FRANKED]*100 as Franking, {data_provider} as DataProviderID
+           from {tt_name} t
+           inner join vewEquities ve on t.stockCode = ve.stockCode
+           inner join tblExchange e on e.Exchange=ve.Exchange
+    ) AS source
+    ON source.StockCode = target.InvestmentCode and source.ExchangeID = target.ExchangeID
+        and source.FinancialYear = target.FinancialYear and target.DataProviderID = source.DataProviderID
+    WHEN MATCHED
+        THEN UPDATE SET Franking = source.Franking
+    WHEN NOT MATCHED
+        THEN INSERT (InvestmentCode, ExchangeID, FinancialYear, EPS, DPS, Franking, DataProviderID)
+        VALUES (source.StockCode, source.ExchangeID, source.FinancialYear, source.EPS, source.DPS, source.Franking, 1)
+    ;
+    '''.format(tt_name=tt_name, fy=fy, data_provider=data_provider)
+
+    return qry
+
 def qry_delete_lonsec_if_ubs(tt_name, fy):
     return '''
     delete se_lonsec
@@ -100,18 +123,21 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
         rename(db, tt_name, 'FY16 EPS GROWTH', 'EPSGrowth')
         rename(db, tt_name, '% FRANKED', 'PERCENT_FRANKED')
         rename(db, tt_name, 'FY16 PER', 'PER')
+    elif 'ubs' in upload_type:
+        rename(db, tt_name, 'InvestmentCode', 'StockCode')
+        rename(db, tt_name, 'Franking', 'PERCENT_FRANKED')
 
-        count = db.get_one_value('''
-        select count(*)
-        from {tt_name}
-        where PERCENT_FRANKED > 1
+    count = db.get_one_value('''
+    select count(*)
+    from {tt_name}
+    where PERCENT_FRANKED > 1
+    '''.format(tt_name=tt_name))
+
+    if count > 0:
+        db.execute('''
+        update {tt_name}
+        set PERCENT_FRANKED = PERCENT_FRANKED / 100
         '''.format(tt_name=tt_name))
-
-        if count > 0:
-            db.execute('''
-            update {tt_name}
-            set PERCENT_FRANKED = PERCENT_FRANKED / 100
-            '''.format(tt_name=tt_name))
 
     # back up ExternalData.dbo.tblGrowthSeries
     helper.backup_table(db, 'ExternalData.dbo.tblStockEarnings')
@@ -124,14 +150,15 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
     for row in rows:
         logger.info(row)
 
-
     qry_update = qry_update_model_stock_code if 'model' in upload_type else qry_update_stock_code
+    qry_update = qry_update_ubs_stock_code if 'ubs' in upload_type else qry_update
+    logger.info('Data provider {}'.format(data_provider))
     count = db.execute(qry_update(tt_name, fy, data_provider))
     logger.info(count)
 
-    if 'model' in upload_type:
+    if upload_type in ['model']:
         count = db.execute(qry_update(tt_name, fy, data_provider=1))
-        logger.info(count)
+        logger.info('{} updated with 1'.format(count))
         count1 = db.execute(qry_delete_lonsec_if_ubs(tt_name, fy))
         logger.info(str(count1)+' deleted')
 
@@ -166,10 +193,10 @@ def consoleUI():
     parser.add_argument('-v', '--verbose', action='count', default=0)
     parser.add_argument('-i', '--input', help='An excel file (normally from Jen Lee)', required=True)
     parser.add_argument('--upload-type', help='Investment Growth or Benchmark Growth'
-                        , choices=['etf', 'hybrids', 'model']
+                        , choices=['etf', 'hybrids', 'model', 'ubs']
                         , required=True)
     parser.add_argument('--sheet', help='Sheet Name or Sheet Index', required=True)
-    parser.add_argument('--data-provider', help='ETF: 4, Lonsec: 1, more at tblDataProvider', default=8, required=True)
+    parser.add_argument('--data-provider', help='ETF: 4, Lonsec: 1, more at tblDataProvider', default=8, required=True, type=int)
     parser.add_argument('--dry-run', action='store_true')
 
     a = parser.parse_args()
@@ -185,7 +212,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    if 'model' in a.upload_type and a.data_provider != 7:
+    if (a.upload_type in ['ubs', 'model']) and a.data_provider != 7:
         raise Exception('{} should have data provider 7 not {}'.format(a.upload_type, a.data_provider))
 
     upload(db, a.input, a.sheet, a.data_provider, a.upload_type)

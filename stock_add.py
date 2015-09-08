@@ -9,10 +9,10 @@ import datetime
 logger = logging.getLogger(__name__)
 
 
-def add(db, stock_code, stock_name, exchange_name, sector, investment_type_id, show_on_web, investment_status_id):
+def add(db, stock_code, stock_name, exchange_name, sector, investment_type_id, show_on_web, investment_status_id, investment_id):
     data_dict = locals()
     del data_dict['db']
-    data_dict = ['@{k}={v!r}'.format(k=k.replace('_',''), v=v) for k, v in data_dict.items()]
+    data_dict = ['@{k}={v!r}'.format(k=k.replace('_', ''), v=v) for k, v in data_dict.items() if v]
 
     proc_query = '''
     exec Lonsec.dbo.prcInvestmentPut {params}
@@ -40,6 +40,7 @@ def consoleUI():
     parser.add_argument('--stock-name', help='Stock Name', required=True)
     parser.add_argument('--exchange-name', help='Exchange Name', required=True)
     parser.add_argument('--sector', help='Sector Name', required=True)
+    parser.add_argument('--investment-id', help='Existing investment id (if any)', type=int)
     parser.add_argument('--investment-type-id', help='Sector Name', type=int, required=True)
     parser.add_argument('--show-on-web', help='Show On Web', type=int, default=1)
     parser.add_argument('--investment-status-id', help='Investment Status ID', type=int, default=1)
@@ -58,7 +59,7 @@ def consoleUI():
         db.debug = True
 
     add(db, a.stock_code, a.stock_name, a.exchange_name, a.sector
-        , a.investment_type_id, a.show_on_web, a.investment_status_id)
+        , a.investment_type_id, a.show_on_web, a.investment_status_id, a.investment_id)
 
     if not a.dry_run:
         logger.info('Commit changes')

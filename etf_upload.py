@@ -75,7 +75,6 @@ def qry_add_new_data_table(table_name, to_be_added_stock_codes, data_provider, u
     field = 'stock' if 'investment' in upload_type else upload_type
     field1 = 'stock' if 'investment' in upload_type else 'Alternative'
 
-
     return '''
         declare @stockcodes VARCHAR(MAX) = '{codes}'
         insert into {table_name}({key_field_id}, DataProviderID, {key_field_code}, IsUsedForGrowthSeries)

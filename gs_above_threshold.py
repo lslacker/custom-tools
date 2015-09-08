@@ -5,10 +5,11 @@ from mssqlwrapper import DB, TempTable
 import logging
 from reader import ExcelReader
 import datetime
+import helper
 
 logger = logging.getLogger(__name__)
 
-
+@helper.debug
 def import_growth_series_query(tt_name):
     return '''
         truncate table [ExternalData].dbo.ImportGrowthSeries;
@@ -46,7 +47,7 @@ def merge_to_tblInvestmentGrowthSeries_query():
     '''
 
 
-def process(db, excel_file, dry_run):
+def process(db, excel_file):
     # Import excel file into temp table
     reader = ExcelReader(excel_file)
     rows = reader.get_data_from_sheet(0)
@@ -79,11 +80,7 @@ def process(db, excel_file, dry_run):
     logger.info(db.get_data('select top 1 * from tblInvestmentGrowthSeries where investmentid=? order by [date] desc'
                             , investment_id))
 
-    if not dry_run:
-        logger.info('Commit changes')
-        db.commit()
-    else:
-        logger.info('All changes did not commit')
+
 
 
 def consoleUI():
@@ -106,8 +103,13 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    process(db, a.input, a.dry_run)
+    process(db, a.input)
 
+    if not a.dry_run:
+        logger.info('Commit changes')
+        db.commit()
+    else:
+        logger.info('All changes did not commit')
 
 if __name__ == '__main__':
     consoleUI()

@@ -144,14 +144,16 @@ def upload_benchmark(db, excel_file, sheet_name_or_idx, data_provider):
 
     count = db.execute(qry_refresh_data_in_table('tblBenchmarkCode', tt_name, data_provider, 'benchmarkCode'))
     # assert count == len(tt_name)
-
-    logger.info('After inserting data to tblBenchmarkGrowthSeries'.format(rows[0][1]))
-    rows = db.get_data('''
-    select top 1 * from tblBenchmarkGrowthSeries
-    where benchmarkid=?
-    order by [date] desc
-    ''', rows[0][1])
-    logger.info(rows)
+    try:
+        logger.info('After inserting data to tblBenchmarkGrowthSeries'.format(rows[0][1]))
+        rows = db.get_data('''
+        select top 1 * from tblBenchmarkGrowthSeries
+        where benchmarkid=?
+        order by [date] desc
+        ''', rows[0][1])
+        logger.info(rows)
+    except:
+        logger.info("New or Error")
 
     # now insert new codes if exist
     to_be_added_benchmark_codes = db.get_data(qry_check_codes_not_exist_in_tblBenchmarkCode(tt_name, data_provider))
