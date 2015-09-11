@@ -14,8 +14,9 @@ def qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     return '''
     delete gs
     from ExternalData.dbo.tblGrowthSeries  gs
-    inner join (select distinct code, date from {tt_name}) tt on gs.externalcode = tt.code and gs.date = tt.date
-    where gs.dataproviderid = {data_provider}
+    inner join (select distinct code, date from {tt_name}) tt on gs.externalcode = tt.code
+    --and gs.date = tt.date
+    --where gs.dataproviderid = {data_provider}
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
 @helper.debug
@@ -120,6 +121,8 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
     # Import excel file into temp table
     tt_name = helper.upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
 
+    db.execute(qry_update_last_date_of_month(tt_name))
+
     # back up ExternalData.dbo.tblGrowthSeries
     backup_table(db, 'ExternalData.dbo.tblGrowthSeries')
 
@@ -187,6 +190,7 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
         # assert len(to_be_added_stock_codes) == count
 
     if 'investment' in upload_type:
+        # dont need to refresh once switching over report controller from SSRS
         count = db.execute(qry_regenerate_report(tt_name))
         logger.info('{} updated for regenerating report'.format(count))
 

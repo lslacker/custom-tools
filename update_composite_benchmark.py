@@ -26,16 +26,23 @@ def check_in_gs():
 def update(db):
     composite_benchmarks = db.get_data(get_composite_benchmark())
     benchmarkids, alternativecodes = zip(*composite_benchmarks)
-    data_dict = dict(BenchmarkIDCSV=','.join(benchmarkids),
-                     ForceRecalculate=0,
-                     CacheResults=1)
-    data_dict = ['@{k}={v!r}'.format(k=k.replace('_', ''), v=v) for k, v in data_dict.items()]
-    proc_query = '''
-    exec Lonsec.dbo.prcBenchmarkGrowthSeriesGet {params}
-    '''.format(params=','.join(data_dict))
-    logger.info(proc_query)
-    count = db.execute(proc_query)
-    logger.info(count)
+
+    for benchmarkid, benchmarkcode in composite_benchmarks:
+        logger.info('Composite benchmark: {} - {}'.format(benchmarkid, benchmarkcode))
+        data_dict = dict(BenchmarkIDCSV=benchmarkid,
+                         ForceRecalculate=0,
+                         CacheResults=1
+                         )
+        default_params = '@DateFrom=default,@DateTo=default,@StartValue=default,@DataSource=9,@ReturnRowIfMissingValue=0,'\
+                         '@CurrencyCode=default,@ReturnResults=default'
+        data_dict = ['@{k}={v!r}'.format(k=k.replace('_', ''), v=v) for k, v in data_dict.items()]
+        proc_query = '''
+        exec Lonsec.dbo.prcBenchmarkGrowthSeriesGet {params},{default_params}
+        '''.format(params=','.join(data_dict), default_params=default_params)
+        db.commit()
+        logger.info(proc_query)
+        count = db.execute(proc_query)
+        logger.info(count)
 
 
 def consoleUI():
