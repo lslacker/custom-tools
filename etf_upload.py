@@ -15,8 +15,8 @@ def qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     delete gs
     from ExternalData.dbo.tblGrowthSeries  gs
     inner join (select distinct code, date from {tt_name}) tt on gs.externalcode = tt.code
-    --and gs.date = tt.date
-    --where gs.dataproviderid = {data_provider}
+    and gs.date = tt.date
+    where gs.dataproviderid = {data_provider}
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
 @helper.debug
