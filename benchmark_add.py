@@ -9,11 +9,6 @@ import datetime
 logger = logging.getLogger(__name__)
 
 
-def qry_insert_benchmark_hier():
-    return '''
-    insert into
-    '''
-
 def add(db, benchmark_name, alternative_code, benchmark_id, weight):
     data_dict = locals()
     del data_dict['db']
