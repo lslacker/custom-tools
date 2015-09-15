@@ -236,7 +236,7 @@ def upload_top10(db, excel_file, sheet_name_or_idx, data_provider):
 
 
 def upload_cost(db, excel_file, sheet_name_or_idx):
-    tt_name = upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
+    tt_name = helper.upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
 
     # create other quries for attribute 19
     tt_name = TempTable.create_from_query(db, qry_clone_date_to_attribute_id_19(tt_name, 'Fees & Indirect Costs Date'))

@@ -72,7 +72,7 @@ def qry_refresh_data_table_GrowthSeries(table_name, tt_name, data_provider, key_
 @helper.debug
 def qry_add_new_data_table(table_name, to_be_added_stock_codes, data_provider, upload_type, key_field_code, key_field_id):
 
-    view_name = 'viewEquities' if 'investment' in upload_type else 'vewISF_Benchmark'
+    view_name = 'vewEquities' if 'investment' in upload_type else 'vewISF_Benchmark'
     field = 'stock' if 'investment' in upload_type else upload_type
     field1 = 'stock' if 'investment' in upload_type else 'Alternative'
 

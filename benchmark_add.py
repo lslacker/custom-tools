@@ -8,8 +8,19 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
+def qry_get_next_benchmark_code():
+    return '''
+    select (coalesce(max(abs(convert(int, alternativeCode))),0) + 1) nextBenchmarkCode from tblBenchmark
+    where alternativeCode like '-%'
+    '''
+
+def get_next_benchmark_code(db):
+    next_benchmark_code = db.get_one_value(qry_get_next_benchmark_code())
+    return '-{}'.format(next_benchmark_code)
 
 def add(db, benchmark_name, alternative_code, benchmark_id, weight):
+
+    alternative_code = alternative_code or get_next_benchmark_code(db)
     data_dict = locals()
     del data_dict['db']
     del data_dict['weight']
@@ -62,7 +73,7 @@ def consoleUI():
     parser.add_argument('-v', '--verbose', action='count', default=0)
     parser.add_argument('--benchmark-id', help='Benchmark ID')
     parser.add_argument('--benchmark-name', help='Benchmark Name', required=True)
-    parser.add_argument('--alternative-code', help='Benchmark Code', required=True)
+    parser.add_argument('--alternative-code', help='Benchmark Code')
     parser.add_argument('--weight', help='Benchmark Weight ', nargs='+')
     parser.add_argument('--dry-run', help='Run without commit changes', action='store_true')
 
