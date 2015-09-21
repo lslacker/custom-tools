@@ -3,20 +3,48 @@ __author__ = 'lslacker'
 import argparse
 from mssqlwrapper import DB, TempTable
 import logging
-from reader import ExcelReader
-import datetime
+import helper
 
 logger = logging.getLogger(__name__)
 
 
-def add(db, stock_code, stock_name, exchange_name, sector, investment_type_id, show_on_web, investment_status_id
-        , investment_id, force_new_stock):
-    data_dict = locals()
-    del data_dict['db']
+@helper.debug
+def qry_is_lonsec_user(client_id):
+    return '''
+    select count(*) from LonsecLogin..fnClientAncestors({client_id}) where ClientID = 153
+    '''.format(client_id=client_id)
+
+@helper.debug
+def qry_get_client_detail(client_id):
+    return '''
+    select ClientNameCombined, Email, Tel
+    from fnClientDetails({client_id}, null)
+    '''.format(client_id=client_id)
+
+
+def is_lonsec_user(db, client_id):
+    count = db.get_one_value(qry_is_lonsec_user(client_id))
+    return True if count > 0 else False
+
+
+def get_client_detail(db, client_id):
+    data = db.get_data(qry_get_client_detail(client_id))
+    return [(x.ClientNameCombined, x.Email, x.Tel) for x in data]
+
+
+def add(db, client_id, domain_login, lonsec_contact_id):
+
+    if not is_lonsec_user:
+        raise Exception('{} is not Lonsec'.format(client_id))
+
+    client_detail = get_client_detail(db, client_id)[0]
+
+    data_dict = dict(name=client_detail[0], email=client_detail[1], tel=client_detail[2], domain_login=domain_login
+                     , is_active=1)
     data_dict = ['@{k}={v!r}'.format(k=k.replace('_', ''), v=v) for k, v in data_dict.items() if v]
 
     proc_query = '''
-    exec Lonsec.dbo.prcInvestmentPut {params}
+    exec prcLonsecContactPut {params}
     '''.format(params=','.join(data_dict))
     logger.info(proc_query)
 
@@ -27,7 +55,7 @@ def add(db, stock_code, stock_name, exchange_name, sector, investment_type_id, s
         next(db)
         raise_error = True   # should not have another set of data
     except:
-        logger.info('InvestmentID (StockID): {}'.format(rows[0][0]))
+        logger.info('LonsecContactID: {}'.format(rows[0][0]))
 
     if raise_error:
         raise Exception('Should not need to create new sector, please check your sector again')
@@ -37,15 +65,10 @@ def consoleUI():
     parser.add_argument('--server', default=r'MEL-TST-001\WEBSQL', help='Database Server')
     parser.add_argument('--database', default=r'Lonsec', help='Database Name')
     parser.add_argument('-v', '--verbose', action='count', default=0)
-    parser.add_argument('--stock-code', help='Stock Code', required=True)
-    parser.add_argument('--force-new-stock', help='Force New Stock Code', type=int)
-    parser.add_argument('--stock-name', help='Stock Name', required=True)
-    parser.add_argument('--exchange-name', help='Exchange Name', required=True)
-    parser.add_argument('--sector', help='Sector Name', required=True)
-    parser.add_argument('--investment-id', help='Existing investment id (if any)', type=int)
-    parser.add_argument('--investment-type-id', help='Sector Name', type=int, required=True)
-    parser.add_argument('--show-on-web', help='Show On Web', type=int, default=1)
-    parser.add_argument('--investment-status-id', help='Investment Status ID', type=int, default=1)
+    parser.add_argument('--client-id', help='Lonsec Client ID', type=int, required=True)
+    parser.add_argument('--lonsec-contact-id', help='Lonsec Client ID', type=int)
+    parser.add_argument('--domain-login', help='Domain Login MELBOURNE\\xxx', required=True)
+
     parser.add_argument('--dry-run', help='An excel file (normally from Jen Lee)', action='store_true')
 
     a = parser.parse_args()
@@ -60,8 +83,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    add(db, a.stock_code, a.stock_name, a.exchange_name, a.sector
-        , a.investment_type_id, a.show_on_web, a.investment_status_id, a.investment_id, a.force_new_stock)
+    add(db, a.client_id, a.domain_login, a.lonsec_contact_id)
 
     if not a.dry_run:
         logger.info('Commit changes')

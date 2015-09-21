@@ -20,12 +20,13 @@ def qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
     '''.format(tt_name=tt_name, data_provider=data_provider)
 
 @helper.debug
-def qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider):
+def qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider, value_ex_div):
+
     return '''
     insert into ExternalData.dbo.tblGrowthSeries (ExternalCode, Date, Value, ValueExclDiv, DataProviderID, DateUpdated)
-    select distinct Code, Date, Value, 0, {data_provider}, getdate()
+    select distinct Code, Date, Value, {with_value_ex_div}, {data_provider}, getdate()
     from {tt_name}
-    '''.format(tt_name=tt_name, data_provider=data_provider)
+    '''.format(tt_name=tt_name, data_provider=data_provider, with_value_ex_div='ValueExDiv' if value_ex_div else 0)
 
 @helper.debug
 def qry_check_codes_not_exist_in_tblStock(tt_name):
@@ -129,8 +130,12 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
     count = db.execute(qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider))
     logger.info('{} rows deleted in ExternalData..tblGrowthSeries'.format(count))
 
-    count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider))
-    logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
+    try:
+        count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider, value_ex_div=True))
+        logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
+    except:
+        count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider, value_ex_div=False))
+        logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
 
     rows = db.get_data(qry_check_codes_not_exist_in_tblStock(tt_name))
     if rows and 'investment' in upload_type:
@@ -189,10 +194,10 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
         # can not do asset because trigger return 0 :-(
         # assert len(to_be_added_stock_codes) == count
 
-    if 'investment' in upload_type:
-        # dont need to refresh once switching over report controller from SSRS
-        count = db.execute(qry_regenerate_report(tt_name))
-        logger.info('{} updated for regenerating report'.format(count))
+    # if 'investment' in upload_type:
+    #     # dont need to refresh once switching over report controller from SSRS
+    #     count = db.execute(qry_regenerate_report(tt_name))
+    #     logger.info('{} updated for regenerating report'.format(count))
 
     return tt_name
 
@@ -212,8 +217,12 @@ def upload_global(db, tt_name, data_provider):
     count = db.execute(qry_delete_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider))
     logger.info('{} rows deleted in ExternalData..tblGrowthSeries'.format(count))
 
-    count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider))
-    logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
+    try:
+        count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider, value_ex_div=True))
+        logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
+    except:
+        count = db.execute(qry_add_codes_in_externaldata_tblGrowthSeries(tt_name, data_provider, value_ex_div=False))
+        logger.info('{} rows inserted in ExternalData..tblGrowthSeries'.format(count))
 
     def qry_get_new_arc_stock():
         return '''
