@@ -156,64 +156,65 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.DEBUG)
 
-    root_client_id = 47475  # IOOF Group
-    root_client_id = 13693  # RSM Bird Cameron
-
-    clientids = get_childrens(db, root_client_id)
-
-    exclude_financial_advisor = False
-
-    company_users = get_company(db, clientids, exclude_financial_advisor)
-    individual_users = get_users(db, clientids, exclude_financial_advisor)
-
-    header = 'ClientID,ParentID,Office,DealerGroup,ClientTypeID,ClientName,ClientFirstName,ClientNameCombined,' \
-             'SalutationID,Salutation,ClientPositionID,Email,IsAddressInherited,Address,PostCodeID,PostCode,Locality,'\
-             'State,Region,PostalAddress,PostalPostCodeID,PostalPostCode,PostalLocality,PostalState,PostalRegion,'\
-             'IsTelInherited,Tel,Mobile,IsFaxInherited,Fax,BSB,BankAccountName,BankAccountNo,ABN,ClientCode,'\
-             'BrokerAdvisorCode,LonsecContactID,AccountingCode,SendEmails,InviteToEvents,IsActive,StillExists,'\
-             'HasLicence,Comment,ClientSourceID,DateCreated,CreatedBy,DateUpdated,UpdatedBy,Password,LastLogin, Description'
-
-    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_20150917.csv', individual_users, header)
-
-    clientids = [row[0] for row in individual_users]
-
-    # EXTERNAL CLIENT MAPPING
-    header = 'ClientID,ExternalClientCode,ExternalClientName,OutputDest,SourceClientID,SourceClientCode,SourceClientName'
-    data = get_external_client_mappping(db, clientids)
-    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_external_20150917.csv', data, header)
-
-    # MODULES
-    data = get_client_subscriptions(db, clientids)
-    header = 'ClientID,ModuleID,ModuleName'
-    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_subscription_20150917.csv', data, header)
+    # root_client_id = 47475  # IOOF Group
+    # root_client_id = 13693  # RSM Bird Cameron
+    #
+    # clientids = get_childrens(db, root_client_id)
+    #
+    # exclude_financial_advisor = False
+    #
+    # company_users = get_company(db, clientids, exclude_financial_advisor)
+    # individual_users = get_users(db, clientids, exclude_financial_advisor)
+    #
+    # header = 'ClientID,ParentID,Office,DealerGroup,ClientTypeID,ClientName,ClientFirstName,ClientNameCombined,' \
+    #          'SalutationID,Salutation,ClientPositionID,Email,IsAddressInherited,Address,PostCodeID,PostCode,Locality,'\
+    #          'State,Region,PostalAddress,PostalPostCodeID,PostalPostCode,PostalLocality,PostalState,PostalRegion,'\
+    #          'IsTelInherited,Tel,Mobile,IsFaxInherited,Fax,BSB,BankAccountName,BankAccountNo,ABN,ClientCode,'\
+    #          'BrokerAdvisorCode,LonsecContactID,AccountingCode,SendEmails,InviteToEvents,IsActive,StillExists,'\
+    #          'HasLicence,Comment,ClientSourceID,DateCreated,CreatedBy,DateUpdated,UpdatedBy,Password,LastLogin, Description'
+    #
+    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_20150917.csv', individual_users, header)
+    #
+    # clientids = [row[0] for row in individual_users]
+    #
+    # # EXTERNAL CLIENT MAPPING
+    # header = 'ClientID,ExternalClientCode,ExternalClientName,OutputDest,SourceClientID,SourceClientCode,SourceClientName'
+    # data = get_external_client_mappping(db, clientids)
+    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_external_20150917.csv', data, header)
+    #
+    # # MODULES
+    # data = get_client_subscriptions(db, clientids)
+    # header = 'ClientID,ModuleID,ModuleName'
+    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_subscription_20150917.csv', data, header)
 
     #
     #
     #
-    # # get client advisor codes
-    # advisor_codes = db.get_data(qry_get_broker_advisor_codes(clientids))
-    # advisor_codes = [list(zip(repeat(code[0]), code[1].split(','))) for code in advisor_codes]
-    # print(advisor_codes)
-    # advisor_codes = list(chain(*advisor_codes))
-    #
-    # create_qry = '''
-    # create table {table_name} (
-    #     clientid int,
-    #     advisercode varchar(10) collate Latin1_General_CI_AS
-    # )
-    # '''
-    # tt_name = TempTable.create_from_data(octopus_db, advisor_codes, create_qry)
-    #
-    # rows = octopus_db.get_data(qry_get_advcode(tt_name))
-    #
-    # orig_clientids = {x for x in clientids}
-    # out_clientids = {row[0] for row in rows}
-    # print("Below users do not have advcode")
-    # print(orig_clientids - out_clientids)
-    # with open(r'C:\Users\Lmai\Documents\Workspaces\test_clientadvcodes.csv', 'w') as f:
-    #     csvwriter = csv.writer(f, lineterminator='\n')
-    #     csvwriter.writerow(['userid', 'advcode'])
-    #     csvwriter.writerows(rows)
+    # get client advisor codes
+    clientids = [15134]
+    advisor_codes = db.get_data(qry_get_broker_advisor_codes(clientids))
+    advisor_codes = [list(zip(repeat(code[0]), code[1].split(','))) for code in advisor_codes]
+    print(advisor_codes)
+    advisor_codes = list(chain(*advisor_codes))
+
+    create_qry = '''
+    create table {table_name} (
+        clientid int,
+        advisercode varchar(10) collate Latin1_General_CI_AS
+    )
+    '''
+    tt_name = TempTable.create_from_data(octopus_db, advisor_codes, create_qry)
+
+    rows = octopus_db.get_data(qry_get_advcode(tt_name))
+
+    orig_clientids = {x for x in clientids}
+    out_clientids = {row[0] for row in rows}
+    print("Below users do not have advcode")
+    print(orig_clientids - out_clientids)
+    with open(r'C:\Users\Lmai\Documents\Workspaces\test_clientadvcodes.csv', 'w') as f:
+        csvwriter = csv.writer(f, lineterminator='\n')
+        csvwriter.writerow(['userid', 'advcode'])
+        csvwriter.writerows(rows)
     #
     # clientmoduleids_lookup = defaultdict(list)
     #

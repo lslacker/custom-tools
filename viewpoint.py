@@ -85,12 +85,13 @@ def qry_deactive_invalid_investment_report(report_id, investment_ids):
     where reportid={report_id} and isActive=1 and investmentid in ({investment_ids})
     '''.format(report_id=report_id, investment_ids=','.join(map(str, investment_ids)))
 
-def qry_update_investment_viewpoint(investment_id, stock_code):
+@helper.debug
+def qry_update_investment_viewpoint(investment_id, stock_code, report_id):
     return '''
     update tblInvestmentReport
     set reportURL='{stock_code}', regenerate=0
-    where investmentid = {investment_id} and isActive=1
-    '''.format(stock_code=stock_code, investment_id=investment_id)
+    where investmentid = {investment_id} and isActive=1 and reportid = {report_id}
+    '''.format(stock_code=stock_code, investment_id=investment_id, report_id=report_id)
 
 
 def get_parent_id(db, fund_id):
@@ -158,7 +159,7 @@ def add(db, from_report_id, to_report_id, report_type):
     table_name = 'tbl{report_type}'.format(report_type=report_type)
     helper.backup_table(db, table_name)
     if from_report_id != to_report_id:
-        # from report 1 to report 24
+        # from report 1 to report 35
         # update report 1 to
         direct_property_sector_tt_name = TempTable.create_from_query(db, qry_get_direct_property_sector())
         report_tt_name = TempTable.create_from_query(db, qry_get_existing_fund_update(table_name, from_report_id,
@@ -235,7 +236,7 @@ def add(db, from_report_id, to_report_id, report_type):
                 is_link_exists = link_exists(urllink)
                 if is_link_exists:
                     logger.info('----> OK')
-                    count = db.execute(qry_update_investment_viewpoint(investment_id, stock_code))
+                    count = db.execute(qry_update_investment_viewpoint(investment_id, stock_code, to_report_id))
                     logger.info('{} updated'.format(count))
                     ok += [investment_id]
                 else:
@@ -266,13 +267,13 @@ def add(db, from_report_id, to_report_id, report_type):
         no_reports = []
         for investment_id, stock_code in data:
             if stock_code:
-                urllink = 'https://reports.lonsec.com.au/FP-LIVE-SF/{}'.format(stock_code)
+                urllink = 'https://reports.lonsec.com.au/FP/{}'.format(stock_code)
                 logger.info('Checking {} exists'.format(urllink))
                 #is_link_exists = link_exists(urllink)
                 is_link_exists = True
                 if is_link_exists:
                     logger.info('----> OK')
-                    count = db.execute(qry_update_investment_viewpoint(investment_id, stock_code))
+                    count = db.execute(qry_update_investment_viewpoint(investment_id, stock_code, to_report_id))
                     logger.info('{} updated'.format(count))
                     ok += [investment_id]
                 else:
