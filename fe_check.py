@@ -3,6 +3,7 @@ __author__ = 'lslacker'
 import argparse
 from mssqlwrapper import DB, TempTable
 import logging
+import collections
 import csv
 
 logger = logging.getLogger(__name__)
@@ -20,25 +21,29 @@ def qry_get_latest_gs(tt_name):
     select *
     from (
         select rank() over (partition by ic.investmentcode order by date desc) as luan_r
-        , ic.investmentCode, igs.Date, igs.Value, ic.investmentID
+        , ic.investmentCode, igs.Date, igs.Value, igs.ValueExDiv, ic.investmentID
         from {tt_name} ic
         inner join tblInvestmentGrowthSeries igs on ic.InvestmentID = igs.InvestmentID
         where 0 = all (select isLonsecData from tblInvestmentGrowthSeries igs1 where igs1.investmentID = igs.investmentID)
-    ) T where luan_r=1
+    ) T
+    --where luan_r=1
     '''.format(tt_name=tt_name)
 
 
 def qry_compare_last_gs_with_external(tt_name):
     return '''
     With T as (
-    select rank() over (partition by externalcode order by date desc) as luan_r, *
+    select *
+    --, rank() over (partition by externalcode order by date desc) as luan_r
     from ExternalData..tblGrowthSeries
     where dataproviderid=3
     )
     select tt.investmentID, tt.investmentCode, tt.Date, tt.Value, T.Value as ExternalValue
+    , tt.ValueExDiv, T.ValueExclDiv as ExternalValueExDiv, fapir.ApirCode
     from {tt_name} tt
-    left join T on T.externalCode = tt.investmentcode and T.luan_r = 1 and T.date = tt.date
-    where T.Value <> tt.Value
+    inner join ExternalData..vewFundAPIRCode fapir on fapir.externalcode = tt.investmentcode
+    left join T on T.externalCode = tt.investmentcode and T.date = tt.date
+    where T.Value <> tt.Value or T.ValueExclDiv <> tt.ValueExDiv
     '''.format(tt_name=tt_name)
 
 
@@ -63,10 +68,24 @@ def double_check(db, output):
     logger.info('-'*40)
 
     data = db.get_data(qry_compare_last_gs_with_external(all_latest_gs_tt))
+    data = [row for row in data]
+    dict_data = collections.defaultdict(list)
+    for row in data:
+        dict_data[row[0]] += [row]
+
+    final_data = []
+    for investmentid, row in dict_data.items():
+        if len(row) > 1:
+            logger.info(row)
+            continue
+        row = list(row[0])
+        row = row + [row[-3] == row[-4], row[-1] == row[-2]]
+        #logger.info(row)
+        final_data += [row]
 
     csvwriter = csv.writer(output, lineterminator='\n')
-    csvwriter.writerow(['investmentID', 'investmentCode', 'Date', 'Value', 'ExternalValue'])
-    csvwriter.writerows(data)
+    csvwriter.writerow(['investmentID', 'investmentCode', 'Date', 'Value', 'ExternalValue', 'ValueExDiv', 'ExternalValueExDiv', 'APIRCode', 'ValueDif', 'ExDivDif'])
+    csvwriter.writerows(final_data)
 
 
 def consoleUI():
