@@ -113,7 +113,7 @@ def backup_table(db, tt_name):
         logger.info('Table {new_tt_name} already exists'.format(new_tt_name=new_tt_name))
 
 
-def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
+def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type, enable_not_found_is_ok):
 
     gs_table_name, table_name, key_field_code, key_field_id \
         = 'tbl{upload_type}GrowthSeries tbl{upload_type}Code {upload_type}Code {upload_type}Id'\
@@ -140,8 +140,11 @@ def upload(db, excel_file, sheet_name_or_idx, data_provider, upload_type):
     rows = db.get_data(qry_check_codes_not_exist_in_tblStock(tt_name))
     if rows and 'investment' in upload_type:
         for row in rows:
-            logger.info('{} does not exist in tblStock (due to trigger, capture only 1 message'.format(row.code))
-        raise Exception('There are stock codes not exist in tblStock')
+            logger.info('{} does not exist in tblStock'.format(row.code))
+        if enable_not_found_is_ok:
+            logger.info('There are stock codes not exist in tblStock')
+        else:
+            raise Exception('There are stock codes not exist in tblStock')
 
     logger.info('Before inserting data to {gs_table_name} from ExternalData..tblGrowthSeries'
                 .format(gs_table_name=gs_table_name))
@@ -251,8 +254,10 @@ def consoleUI():
     parser.add_argument('--upload-type', help='Investment Growth or Benchmark Growth'
                         , choices=['benchmark', 'investment']
                         , required=True)
+    parser.add_argument('--enable-not-found-is-ok', action='store_true')
     parser.add_argument('--sheet', help='Sheet Name or Sheet Index', required=True)
     parser.add_argument('--data-provider', help='ETF: 4, Lonsec: 1, more at tblDataProvider', default=4, required=True)
+    parser.add_argument('--use-tblInvestmentCode', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--with-global', help='Use this toggle if ETF file is global', action='store_true')
 
@@ -269,7 +274,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    tt_name = upload(db, a.input, a.sheet, a.data_provider, a.upload_type)
+    tt_name = upload(db, a.input, a.sheet, a.data_provider, a.upload_type, a.enable_not_found_is_ok)
     if a.with_global:
         logger.info('{0}{1}{0}'.format('*'*10, 'NOW LOAD to ExternalData.dbo.tblGrowthSeries FOR .arc'))
         upload_global(db, tt_name, a.data_provider)
