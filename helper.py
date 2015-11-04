@@ -4,6 +4,7 @@ from reader import ExcelReader
 from mssqlwrapper import TempTable
 import logging
 import pyodbc
+import csv
 
 
 logger = logging.getLogger(__name__)
@@ -81,3 +82,11 @@ def backup_table(db, tt_name):
 def get_financial_year():
     today = datetime.date.today()
     return today.year + (1 if today.month >= 7 else 0)
+
+
+def write_data(output, data, header=None):
+    with open(output, 'w') as f:
+        csvwriter = csv.writer(f, lineterminator='\n')
+        if header:
+            csvwriter.writerow(header)
+        csvwriter.writerows(data)

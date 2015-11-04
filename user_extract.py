@@ -14,16 +14,17 @@ def qry_get_children(client_id):
         where isActive=1
     '''.format(client_id=client_id)
 
-
-def qry_get_client(client_id, exclude_financial_advisor, is_individual=True):
+@helper.debug
+def qry_get_client(client_id, exclude_financial_advisor, is_individual=True, ignore_password=False):
     return '''
     select cd.*, a.password, a.LastLoginTime, ct.Description from fnClientDetails({client_id}, default) cd
     inner join tblClientType ct on cd.clientTypeID = ct.ClientTypeID
     left join tblAuthentication a on cd.clientID = a.clientID
-    where ct.IsIndividual={is_individual} {with_exclude_fa}
+    where ct.IsIndividual={is_individual} {with_exclude_fa} {ignore_password}
     '''.format(client_id=client_id
-               , is_individual="1 and a.password <> '' and isnull(cd.email,'') <> ''" if is_individual else 0
-               , with_exclude_fa=' and cd.ClientTypeID<>3' if exclude_financial_advisor else '')
+               , is_individual="1 and isnull(cd.email,'') <> ''" if is_individual else 0
+               , with_exclude_fa=' and cd.ClientTypeID<>3' if exclude_financial_advisor else ''
+               , ignore_password="and a.password <> ''" if not ignore_password else '')
 
 @helper.debug
 def qry_get_client_portfolio(client_id):
@@ -94,8 +95,8 @@ def get_childrens(db, root_client_id):
     return [row[0] for row in data]
 
 
-def get_client(is_individual, db, clientids, exclude_financial_advisor):
-    temp = [db.get_data(qry_get_client(clientid, exclude_financial_advisor, is_individual)) for clientid in clientids]
+def get_client(is_individual, db, clientids, exclude_financial_advisor, ignore_password):
+    temp = [db.get_data(qry_get_client(clientid, exclude_financial_advisor, is_individual, ignore_password)) for clientid in clientids]
     return [x.pop() for x in temp if x]
 
 
@@ -146,7 +147,7 @@ def write_data(output, data, header=None):
 if __name__ == '__main__':
     connection_string1 = r'Driver={SQL Server Native Client 11.0};Server=mel-sql-002\WEBSQL;Database=LonsecLogin;' \
                          'Trusted_Connection=yes;'
-    irate_connection_string = r'Driver={SQL Server Native Client 11.0};Server=mel-sql-005;Database=iRate;' \
+    irate_connection_string = r'Driver={SQL Server Native Client 11.0};Server=mel-sql-006;Database=iRate;' \
                          'Trusted_Connection=yes;'
     octopus_connection_string = r'Driver={SQL Server Native Client 11.0};Server=mel-sql-001;Database=BackOffice;' \
                          'Trusted_Connection=yes;'
@@ -158,86 +159,86 @@ if __name__ == '__main__':
 
     # root_client_id = 47475  # IOOF Group
     # root_client_id = 13693  # RSM Bird Cameron
-    #
-    # clientids = get_childrens(db, root_client_id)
-    #
-    # exclude_financial_advisor = False
-    #
-    # company_users = get_company(db, clientids, exclude_financial_advisor)
-    # individual_users = get_users(db, clientids, exclude_financial_advisor)
-    #
-    # header = 'ClientID,ParentID,Office,DealerGroup,ClientTypeID,ClientName,ClientFirstName,ClientNameCombined,' \
-    #          'SalutationID,Salutation,ClientPositionID,Email,IsAddressInherited,Address,PostCodeID,PostCode,Locality,'\
-    #          'State,Region,PostalAddress,PostalPostCodeID,PostalPostCode,PostalLocality,PostalState,PostalRegion,'\
-    #          'IsTelInherited,Tel,Mobile,IsFaxInherited,Fax,BSB,BankAccountName,BankAccountNo,ABN,ClientCode,'\
-    #          'BrokerAdvisorCode,LonsecContactID,AccountingCode,SendEmails,InviteToEvents,IsActive,StillExists,'\
-    #          'HasLicence,Comment,ClientSourceID,DateCreated,CreatedBy,DateUpdated,UpdatedBy,Password,LastLogin, Description'
-    #
-    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_20150917.csv', individual_users, header)
-    #
-    # clientids = [row[0] for row in individual_users]
-    #
-    # # EXTERNAL CLIENT MAPPING
-    # header = 'ClientID,ExternalClientCode,ExternalClientName,OutputDest,SourceClientID,SourceClientCode,SourceClientName'
-    # data = get_external_client_mappping(db, clientids)
-    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_external_20150917.csv', data, header)
-    #
-    # # MODULES
-    # data = get_client_subscriptions(db, clientids)
-    # header = 'ClientID,ModuleID,ModuleName'
-    # write_data(r'C:\Users\Lmai\Documents\Workspaces\users_subscription_20150917.csv', data, header)
+    #root_client_id = 43966  # Semaphore Private
+    #root_client_id = 54528  # AMP
+    root_client_id = 35014  # Unisuper
 
-    #
-    #
-    #
+    clientids = get_childrens(db, root_client_id)
+
+    exclude_financial_advisor = False
+
+    company_users = get_company(db, clientids, exclude_financial_advisor, ignore_password=True)
+    individual_users = get_users(db, clientids, exclude_financial_advisor, ignore_password=True)
+
+    header = 'ClientID,ParentID,Office,DealerGroup,ClientTypeID,ClientName,ClientFirstName,ClientNameCombined,' \
+             'SalutationID,Salutation,ClientPositionID,Email,IsAddressInherited,Address,PostCodeID,PostCode,Locality,'\
+             'State,Region,PostalAddress,PostalPostCodeID,PostalPostCode,PostalLocality,PostalState,PostalRegion,'\
+             'IsTelInherited,Tel,Mobile,IsFaxInherited,Fax,BSB,BankAccountName,BankAccountNo,ABN,ClientCode,'\
+             'BrokerAdvisorCode,LonsecContactID,AccountingCode,SendEmails,InviteToEvents,IsActive,StillExists,'\
+             'HasLicence,Comment,ClientSourceID,DateCreated,CreatedBy,DateUpdated,UpdatedBy,Password,LastLogin, Description'
+
+    write_data(r'C:\Users\Lmai\Documents\Workspaces\company_20150917.csv', company_users, header)
+    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_20150917.csv', individual_users, header)
+
+    clientids = [row[0] for row in individual_users]
+
+    # EXTERNAL CLIENT MAPPING
+    header = 'ClientID,ExternalClientCode,ExternalClientName,OutputDest,SourceClientID,SourceClientCode,SourceClientName'
+    data = get_external_client_mappping(db, clientids)
+    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_external_20150917.csv', data, header)
+
+    # MODULES
+    data = get_client_subscriptions(db, clientids)
+    header = 'ClientID,ModuleID,ModuleName'
+    write_data(r'C:\Users\Lmai\Documents\Workspaces\users_subscription_20150917.csv', data, header)
+
     # get client advisor codes
-    clientids = [15134]
     advisor_codes = db.get_data(qry_get_broker_advisor_codes(clientids))
     advisor_codes = [list(zip(repeat(code[0]), code[1].split(','))) for code in advisor_codes]
     print(advisor_codes)
     advisor_codes = list(chain(*advisor_codes))
+    if advisor_codes:
+        create_qry = '''
+        create table {table_name} (
+            clientid int,
+            advisercode varchar(10) collate Latin1_General_CI_AS
+        )
+        '''
+        tt_name = TempTable.create_from_data(octopus_db, advisor_codes, create_qry)
 
-    create_qry = '''
-    create table {table_name} (
-        clientid int,
-        advisercode varchar(10) collate Latin1_General_CI_AS
-    )
-    '''
-    tt_name = TempTable.create_from_data(octopus_db, advisor_codes, create_qry)
+        rows = octopus_db.get_data(qry_get_advcode(tt_name))
 
-    rows = octopus_db.get_data(qry_get_advcode(tt_name))
+        orig_clientids = {x for x in clientids}
+        out_clientids = {row[0] for row in rows}
+        print("Below users do not have advcode")
+        print(orig_clientids - out_clientids)
+        with open(r'C:\Users\Lmai\Documents\Workspaces\test_clientadvcodes.csv', 'w') as f:
+            csvwriter = csv.writer(f, lineterminator='\n')
+            csvwriter.writerow(['userid', 'advcode'])
+            csvwriter.writerows(rows)
 
-    orig_clientids = {x for x in clientids}
-    out_clientids = {row[0] for row in rows}
-    print("Below users do not have advcode")
-    print(orig_clientids - out_clientids)
-    with open(r'C:\Users\Lmai\Documents\Workspaces\test_clientadvcodes.csv', 'w') as f:
+    clientmoduleids_lookup = defaultdict(list)
+
+    rows = []
+    for clientid in clientids:
+        #logging.info(clientid)
+        portfolioids = db.get_data(qry_get_client_portfolio(clientid))
+        #portfolioids = [x.PortfolioID for x in portfolioids]
+        count = 1
+        for portfolio in portfolioids:
+            portfolioid = portfolio.PortfolioID
+            portfolioname = portfolio.PortfolioName
+            if not portfolioname:
+                portfolioname = 'Portfolio {}'.format(count)
+                count += 1
+
+            instrumentids = db.get_data(qry_get_instrument_ids([portfolioid]))
+            instrumentids = [x[0] for x in instrumentids]
+            iratecodes = irate_db.get_data(qry_irate_code(instrumentids))
+            data = [[clientid, portfolioname, product_code] for product_name, product_code in iratecodes]
+            rows += data
+
+    with open(r'C:\Users\Lmai\Documents\Workspaces\greenwood_mark.csv', 'w') as f:
         csvwriter = csv.writer(f, lineterminator='\n')
-        csvwriter.writerow(['userid', 'advcode'])
+        csvwriter.writerow(['userid', 'groupname', 'productcode'])
         csvwriter.writerows(rows)
-    #
-    # clientmoduleids_lookup = defaultdict(list)
-    #
-    # rows = []
-    # for clientid in clientids:
-    #     #logging.info(clientid)
-    #     portfolioids = db.get_data(qry_get_client_portfolio(clientid))
-    #     #portfolioids = [x.PortfolioID for x in portfolioids]
-    #     count = 1
-    #     for portfolio in portfolioids:
-    #         portfolioid = portfolio.PortfolioID
-    #         portfolioname = portfolio.PortfolioName
-    #         if not portfolioname:
-    #             portfolioname = 'Portfolio {}'.format(count)
-    #             count += 1
-    #
-    #         instrumentids = db.get_data(qry_get_instrument_ids([portfolioid]))
-    #         instrumentids = [x[0] for x in instrumentids]
-    #         iratecodes = irate_db.get_data(qry_irate_code(instrumentids))
-    #         data = [[clientid, portfolioname, product_code] for product_name, product_code in iratecodes]
-    #         rows += data
-    #
-    # with open(r'C:\Users\Lmai\Documents\Workspaces\greenwood_mark.csv', 'w') as f:
-    #     csvwriter = csv.writer(f, lineterminator='\n')
-    #     csvwriter.writerow(['userid', 'groupname', 'productcode'])
-    #     csvwriter.writerows(rows)

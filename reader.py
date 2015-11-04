@@ -59,7 +59,8 @@ class ExcelReader:
                     cell.ctype == xlrd.XL_CELL_NUMBER or \
                     cell.ctype == xlrd.XL_CELL_BOOLEAN or \
                     cell.ctype == xlrd.XL_CELL_TEXT:
-                pass
+                if cell_value == 'NULL':
+                    return None
             else:
                 raise Exception('Cell [{}, {}] type is unknown'.format(rowidx+1, colidx))
             return cell_value
