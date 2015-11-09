@@ -3,84 +3,57 @@ __author__ = 'lslacker'
 import argparse
 from mssqlwrapper import DB, TempTable
 import logging
-from reader import ExcelReader
-import datetime
+from functools import partial
 import helper
+
+
 
 logger = logging.getLogger(__name__)
 
-@helper.debug
-def import_growth_series_query(tt_name):
+def qry_unique_investment_id(tt_name):
     return '''
-        truncate table [ExternalData].dbo.ImportGrowthSeries;
+    select count(distinct investmentID)
+    from {tt_name}
+    '''.format(tt_name=tt_name)
 
-        insert into [ExternalData].dbo.ImportGrowthSeries
-        select
-        vf.InvestmentID as Code,
-        vf.InvestmentName as Name,
-        gs.Date,
-        gs.Value,
-        gs.ValueExclDiv as ValueExDiv,
-        null as CurrencyCode
-        from [ExternalData].dbo.tblGrowthSeries gs
-        inner join vewISF_Fund vf on gs.ExternalCode = vf.ExternalCode
-        inner join {tt_name} tt on cast(tt.date as date) = gs.date and vf.InvestmentID = tt.InvestmentID
-        order by vf.InvestmentID
+def qry_current_growth_series(tt_name):
+    return '''
+    select distinct ic.*
+    from tblInvestmentCode ic
+    inner join {tt_name} tt on ic.investmentID = tt.investmentID and ic.isUsedForGrowthSeries = 1
     '''.format(tt_name=tt_name)
 
 
-def merge_to_tblInvestmentGrowthSeries_query():
+@helper.debug
+def qry_update_gs(toggle_gs, tt_name):
+    opposite = 1 - toggle_gs
     return '''
-        MERGE INTO tblInvestmentGrowthSeries AS target
-        USING (
-            --this is FE data, so IsLonsecData = 0
-            select td.code, [Date], [Value], [ValueExDiv], 0 AS IsLonsecData
-            from ExternalData.dbo.ImportGrowthSeries td join Lonsec.dbo.tblInvestment i on td.code = i.InvestmentID
-        ) AS source
-        ON source.code = target.InvestmentID and source.[Date] = target.[Date]
-        WHEN MATCHED
-            THEN UPDATE SET Value = source.Value, ValueExDiv = source.ValueExDiv, IsLonsecData = source.IsLonsecData
-        WHEN NOT MATCHED
-            THEN INSERT (InvestmentID, [Date], Value, ValueExDiv, IsLonsecData) VALUES
-            (source.code, source.[Date], source.Value, source.ValueExDiv, 0)
-        ;
-    '''
+    update ic
+    set isUsedForGrowthSeries = {toggle_gs}
+    from tblInvestmentCode ic
+    inner join {tt_name} tt on ic.investmentCodeID = tt.investmentCodeID
+    and ic.isUsedForGrowthSeries = {opposite}
+    '''.format(tt_name=tt_name, toggle_gs=toggle_gs, opposite=opposite)
 
 
-def process(db, excel_file):
+def process(db, excel_file, sheet_name_or_idx):
+
+    helper.backup_table(db, 'tblInvestmentGrowthSeries')
+
     # Import excel file into temp table
-    reader = ExcelReader(excel_file)
-    rows = reader.get_data_from_sheet(0)
-    tt_name = TempTable.create_from_data(db, rows, reader.create_qry)
+    tt_name = helper.upload_excel_to_tempdb(db, excel_file, sheet_name_or_idx)
+    unique_investmentids = db.get_one_value(qry_unique_investment_id(tt_name))
+    logger.info(unique_investmentids)
 
-    # Extract records in [ExternalData].dbo.tblGrowthSeries that matches InvestmentID in temp table imported above
-    count = db.execute(import_growth_series_query(tt_name))
+    current_gs_tt_name = TempTable.create_from_query(db, qry_current_growth_series(tt_name))
 
-    assert len(tt_name) == count
+    qry_turn_off_gs = partial(qry_update_gs, 0, current_gs_tt_name)
+    qry_turn_on_gs = partial(qry_update_gs, 1, current_gs_tt_name)
 
-    # back up tblInvestmentGrowthSeries
-    today = datetime.date.today()
-    today = today.strftime('%Y%m%d')
+    assert unique_investmentids == len(current_gs_tt_name)
 
-    if not db.sp_columns('tblInvestmentGrowthSeries_{date}'.format(date=today)):
-        # if table does not exist
-        logger.info('Creating tblInvestmentGrowthSeries_{date}'.format(date=today))
-        db.execute('select * into tblInvestmentGrowthSeries_{date} from tblInvestmentGrowthSeries'.format(date=today))
-
-    # get investment id from [ExternalData].dbo.tblGrowthSeries
-    investment_id = db.get_one_value('select top 1 code from [ExternalData].dbo.ImportGrowthSeries')
-    logger.info(investment_id)
-    logger.info('Before updating')
-    logger.info(db.get_data('select top 1 * from tblInvestmentGrowthSeries where investmentid=? order by [date] desc'
-                            , investment_id))
-
-    count = db.execute(merge_to_tblInvestmentGrowthSeries_query())
-    logger.info("{} records updated in tblInvestmentGrowthSeries".format(count))
-    logger.info('After updating')
-    logger.info(db.get_data('select top 1 * from tblInvestmentGrowthSeries where investmentid=? order by [date] desc'
-                            , investment_id))
-
-
+    db.execute(qry_turn_off_gs())   # ignore count
+    db.execute(qry_turn_on_gs())   # ignore count
 
 
 def consoleUI():
@@ -89,6 +62,7 @@ def consoleUI():
     parser.add_argument('--database', default=r'Lonsec', help='Database Name')
     parser.add_argument('-v', '--verbose', action='count', default=0)
     parser.add_argument('-i', '--input', help='An excel file (normally from Jen Lee)', required=True)
+    parser.add_argument('--sheet', help='Sheet Name or Sheet Index', required=True)
     parser.add_argument('--dry-run', help='An excel file (normally from Jen Lee)', action='store_true')
 
     a = parser.parse_args()
@@ -103,7 +77,7 @@ def consoleUI():
     if a.verbose > 1:
         db.debug = True
 
-    process(db, a.input)
+    process(db, a.input, a.sheet)
 
     if not a.dry_run:
         logger.info('Commit changes')
